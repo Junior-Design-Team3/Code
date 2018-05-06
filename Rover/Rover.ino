@@ -9,7 +9,14 @@
 #define PWM_PINB 5
 #define DIR_A 7
 #define DIR_B 4
-#define ORTHOG_TURN_TIME 2454
+
+//pathing constants
+#define ORTHOG_TIME 2454
+#define BACK_STEP_TIME 750
+#define OBSTACLE_LENGTH 28
+#define OVERSHOOT_TIME 30
+#define BRAKE_TIME 100
+#define DEBUG 0
 
 #define FRONT_HIGH_TRIG_PIN 30  // Ultrasonic pins
 #define FRONT_HIGH_ECHO_PIN 31
@@ -27,6 +34,7 @@
 #define BASE_DIST_SIDE  3
 #define BASE_DIST_FRONT_L 10
 #define BASE_DIST_FRONT_H 18
+#define ALIGN_KP 15
 
 
 #define MINE_PIN 2  // Papilio control signals
@@ -40,7 +48,7 @@
 #define IR_DIR_DOWN 0xFF4AB5
 #define IR_DIR_RIGHT 0xFF5AA5
 #define IR_DIR_LEFT 0xFF10EF
-
+#define IR_STOP 0xFF6897
 enum {MOTORA, MOTORB};
 
 enum {RIGHT, UP, LEFT, DOWN};
@@ -65,6 +73,13 @@ uint8_t front_side_avg[SAMPS];
 uint8_t back_side_avg[SAMPS];
 
 uint8_t qi;
+
+/* pathing state */
+uint8_t dir = 1;
+uint8_t obstacle = 0;
+uint16_t min_dist_front_l = BASE_DIST_FRONT_L;
+uint16_t min_dist_front_h = BASE_DIST_FRONT_H;
+uint16_t target_dist_side = BASE_DIST_SIDE;
 
 // ultrasonic sensors
 NewPing front_high_sonar(FRONT_HIGH_TRIG_PIN, FRONT_HIGH_ECHO_PIN, MAX_DISTANCE);
@@ -108,6 +123,10 @@ void setup() {
   IR.enableIRIn();
 
   Serial.begin(9600);
+
+  // Pathing state setup
+  orthogRight(); // We're facing center of field, turn to face right.
+  
   //i=0;
 
   digitalWrite(13, HIGH);
@@ -136,28 +155,51 @@ void loop() {
       digitalWrite(PAP_RESUME, LOW);
     }
   } else {
-    forward(200);
-    pingAll();  // Ping all ultrasonic sensors
 //    Serial.println(front_low_dist);
 
-//    switch(IR_results.value){
-//      case IR_DIR_UP:
-//        forward(150);
-//        break;
-//      case IR_DIR_DOWN:
-//        reverse(150);
-//        break;
-//      case IR_DIR_LEFT:
-//        turnLeft(100);
-//        break;
-//      case IR_DIR_RIGHT:
-//        turnRight(100);
-//        break;
-//      default:
-//        break;
-//      }
+    if (DEBUG){ // if in debug mode, just do what the remote tells you.
+      switch(IR_results.value){
+        case IR_DIR_UP:
+          forward(150);
+          break;
+        case IR_DIR_DOWN:
+          reverse(150);
+          break;
+        case IR_DIR_LEFT:
+          turnLeft(100);
+          break;
+        case IR_DIR_RIGHT:
+          turnRight(100);
+          break;
+        case IR_STOP:
+          forward(0);
+          break;
+        default:
+          break;
+        }
+    }
 
-    
+    else{
+      pingAll();
+      forward(200);
+      
+      if (front_high_dist < BASE_DIST_FRONT_H || front_low_dist < BASE_DIST_FRONT_L){
+        forward(0);
+        delay(BRAKE_TIME);
+        if (front_high_dist - front_low_dist > OBSTACLE_LENGTH) handle_obstacle(); // TODO if the high distance is >1ft more than the low...
+        else if (dir == 3){
+          reverse(150);
+          delay(BACK_STEP_TIME);
+          min_dist_front_l front_low_sonar.ping_median(SAMPS);
+          min_dist_front_h = front_low_sonar.ping_median(SAMPS);
+          orthogLeft(); dir = 0;
+          alignSensors(); // TODO
+          target_side_dist = (front_side_sonar.ping_median(SAMPS) + back_side_.ping_median(SAMPS)) >> 1;
+        }
+        else orthogLeft();
+        }
+
+      }
 
     //Serial.println(i);
     //i++;
@@ -218,6 +260,51 @@ void reset() {  // Reset entire system
   resetArduino();               // Reset Arduino to address 0
 }
 
+void orthogLeft(){
+  turnLeft(100);
+  delay(ORTHOG_TIME);
+  forward(0);
+  delay(BRAKE_TIME);
+  alignSensors();
+  dir++;
+  }
+  
+void orthogRight(){
+  turnRight(100);
+  delay(ORTHOG_TIME);
+  forward(0);
+  delay(BRAKE_TIME);
+  alignSensors();
+  dir--;
+}
+
+int abs(int x){
+    if (x>0) return x;
+    else return -x;
+}
+
+void handleObstacle(){ // get around obstacle
+    orthogLeft();
+    while(back_side_dist < OBSTACLE_LENGTH) pingAll();
+    delay(OVERSHOOT_TIME);
+    orthogRight();
+    forward(150);
+    while(front_low_dist > min_dist_front_l && front_high_dist > min_dist_front_h) pingAll();
+    forwar(0);
+    delay(BRAKE_TIME);
+    if (front_high_dist - front_low_dist > OBSTACLE_LENGTH) handleObstacle();
+    else orthogLeft();
+}
+
+void alignSensors(){
+    while(abs(front_side_dist - back_side_dist) > 2){
+        if (front_side_dist - back_side_dist > 0) turnRight((front_side_dist - back_side_dist) * ALIGN_KP);
+        else turnLeft((front_side_dist - back_side_dist) * ALIGN_KP);
+    }
+    forward(0);
+    delay(BRAKE_TIME);
+}
+  
 void pingAll() {  // Ping each ultrasonic for distance in cm
    front_high_avg[qi] = front_high_sonar.ping_cm();
    front_low_avg[qi] = front_low_sonar.ping_cm();
