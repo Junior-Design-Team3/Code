@@ -21,11 +21,11 @@
 #define BACK_SIDE_ECHO_PIN 43
 
 // Ultrasonic constants
-#define MAX_DISTANCE 100
+#define MAX_DISTANCE 200
 #define DIST_TOLERANCE 5
 #define INCREMENT 20
-#define BASE_DIST_SIDE  8
-#define BASE_DIST_FRONT_L 15
+#define BASE_DIST_SIDE  3
+#define BASE_DIST_FRONT_L 10
 #define BASE_DIST_FRONT_H 18
 
 
@@ -50,8 +50,8 @@ uint8_t directionA, directionB = HIGH;
 
 boolean wait_for_resume = true; // waiting status bit
 
-#define SAMPS 16
-#define LOGSAMPS 4
+#define SAMPS 1
+#define LOGSAMPS 0
 
 uint16_t front_high_dist;  // ultrasonic distances
 uint16_t front_low_dist;
@@ -108,7 +108,11 @@ void setup() {
   IR.enableIRIn();
 
   Serial.begin(9600);
-  i=0;
+  //i=0;
+
+  digitalWrite(13, HIGH);
+  delay(200);
+  digitalWrite(13, LOW);
 }
 
 void(*resetArduino)(void)=0; // function to reset arduino to addr 0
@@ -116,12 +120,13 @@ void(*resetArduino)(void)=0; // function to reset arduino to addr 0
 void loop() {
    if (IR.decode(&IR_results)) {    // Check for IR data
     delay(100);
-    Serial.println(IR_results.value);
+    Serial.println(IR_results.value, HEX);
     if(IR_results.value == IR_RESET) {
       reset();                // Reset system from remote
     }
     IR.resume(); // Receive the next value
-  }
+   } else IR_results.value = 0;
+  Serial.println(wait_for_resume);
   if(wait_for_resume) {   // Wait for mine to be removed
     forward(0);           // Stop rover
     if(IR_results.value == IR_RESUME) {
@@ -131,9 +136,9 @@ void loop() {
       digitalWrite(PAP_RESUME, LOW);
     }
   } else {
-    forward(0);
+    forward(200);
     pingAll();  // Ping all ultrasonic sensors
-    Serial.println(front_high_dist);
+//    Serial.println(front_low_dist);
 
 //    switch(IR_results.value){
 //      case IR_DIR_UP:
@@ -201,8 +206,8 @@ void reverse(int speed) {   // Move backward at given speed
 }
 
 void mineDet() {    // Mine detection interrupt
-  //forward(0);       // Stop rover
- // wait_for_resume = true; // Set waiting status bit
+  forward(0);       // Stop rover
+  wait_for_resume = true; // Set waiting status bit
 }
 
 void reset() {  // Reset entire system
