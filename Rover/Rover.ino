@@ -32,6 +32,7 @@
 #define MINE_PIN 2  // Papilio control signals
 #define PAP_RST 12
 #define PAP_RESUME 9
+#define debouncing_time 1
 
 #define IR_PIN 11           // IR PIN
 #define IR_RESUME 0xFF38C7  // decoded IR values
@@ -65,6 +66,8 @@ uint8_t front_side_avg[SAMPS];
 uint8_t back_side_avg[SAMPS];
 
 uint8_t qi;
+
+volatile unsigned long interruptTime;
 
 // ultrasonic sensors
 NewPing front_high_sonar(FRONT_HIGH_TRIG_PIN, FRONT_HIGH_ECHO_PIN, MAX_DISTANCE);
@@ -101,7 +104,7 @@ void setup() {
   pinMode(MINE_PIN, INPUT);
   pinMode(PAP_RST, OUTPUT);
   pinMode(PAP_RESUME, OUTPUT);
-  attachInterrupt(digitalPinToInterrupt(MINE_PIN), mineDet, RISING); // mine detection interrupt
+  attachInterrupt(digitalPinToInterrupt(MINE_PIN), debounceInterrupt, RISING); // mine detection interrupt
 
   // IR setup
   pinMode(IR_PIN, INPUT);
@@ -122,13 +125,19 @@ void loop() {
     delay(100);
     Serial.println(IR_results.value, HEX);
     if(IR_results.value == IR_RESET) {
+      Serial.println("Reseting");
       reset();                // Reset system from remote
     }
     IR.resume(); // Receive the next value
    } else IR_results.value = 0;
-  Serial.println(wait_for_resume);
+  //Serial.println(wait_for_resume);
+
+  if(interruptTime != 0 && (long)micros()-interruptTime > 1000 * debouncing_time) {
+    if(digitalRead(MINE_PIN) == HIGH) mineDet();
+  }
   if(wait_for_resume) {   // Wait for mine to be removed
     forward(0);           // Stop rover
+    //Serial.println("Waiting");
     if(IR_results.value == IR_RESUME) {
       wait_for_resume = false;
       digitalWrite(PAP_RESUME, HIGH); // Send resume signal to papilio
@@ -136,7 +145,7 @@ void loop() {
       digitalWrite(PAP_RESUME, LOW);
     }
   } else {
-    forward(200);
+    forward(255);
     pingAll();  // Ping all ultrasonic sensors
 //    Serial.println(front_low_dist);
 
@@ -205,7 +214,12 @@ void reverse(int speed) {   // Move backward at given speed
   setmotor(speed, 0, MOTORB);
 }
 
+void debounceInterrupt() {
+    interruptTime = micros();
+}
+
 void mineDet() {    // Mine detection interrupt
+  Serial.println("Wait state");
   forward(0);       // Stop rover
   wait_for_resume = true; // Set waiting status bit
 }
