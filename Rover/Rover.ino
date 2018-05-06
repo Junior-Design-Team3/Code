@@ -9,6 +9,7 @@
 #define PWM_PINB 5
 #define DIR_A 7
 #define DIR_B 4
+#define ORTHOG_TURN_TIME 2454
 
 #define FRONT_HIGH_TRIG_PIN 30  // Ultrasonic pins
 #define FRONT_HIGH_ECHO_PIN 31
@@ -20,7 +21,7 @@
 #define BACK_SIDE_ECHO_PIN 43
 
 // Ultrasonic constants
-#define MAX_DISTANCE 200
+#define MAX_DISTANCE 100
 #define DIST_TOLERANCE 5
 #define INCREMENT 20
 #define BASE_DIST_SIDE  8
@@ -35,24 +36,42 @@
 #define IR_PIN 11           // IR PIN
 #define IR_RESUME 0xFF38C7  // decoded IR values
 #define IR_RESET 0xFFB04F
+#define IR_DIR_UP 0xFF18E7
+#define IR_DIR_DOWN 0xFF4AB5
+#define IR_DIR_RIGHT 0xFF5AA5
+#define IR_DIR_LEFT 0xFF10EF
 
-enum {MOTORB, MOTORA};
+enum {MOTORA, MOTORB};
+
+enum {RIGHT, UP, LEFT, DOWN};
 
 uint8_t speedA, speedB = 0;
 uint8_t directionA, directionB = HIGH;
 
 boolean wait_for_resume = true; // waiting status bit
 
-uint8_t front_high_dist;  // ultrasonic distances
-uint8_t front_low_dist;
-uint8_t front_side_dist;
-uint8_t back_side_dist;
+#define SAMPS 16
+#define LOGSAMPS 4
+
+uint16_t front_high_dist;  // ultrasonic distances
+uint16_t front_low_dist;
+uint16_t front_side_dist;
+uint16_t back_side_dist;
+
+/* rolling averages */
+uint8_t front_high_avg[SAMPS];
+uint8_t front_low_avg[SAMPS];
+uint8_t front_side_avg[SAMPS];
+uint8_t back_side_avg[SAMPS];
+
+uint8_t qi;
 
 // ultrasonic sensors
 NewPing front_high_sonar(FRONT_HIGH_TRIG_PIN, FRONT_HIGH_ECHO_PIN, MAX_DISTANCE);
 NewPing front_low_sonar(FRONT_LOW_TRIG_PIN, FRONT_LOW_ECHO_PIN, MAX_DISTANCE);
 NewPing front_side_sonar(FRONT_SIDE_TRIG_PIN, FRONT_SIDE_ECHO_PIN, MAX_DISTANCE);
 NewPing back_side_sonar(BACK_SIDE_TRIG_PIN, BACK_SIDE_ECHO_PIN, MAX_DISTANCE);
+NewPing sonar = back_side_sonar;
 
 // IR receiver
 IRrecv IR(IR_PIN);
@@ -95,9 +114,9 @@ void setup() {
 void(*resetArduino)(void)=0; // function to reset arduino to addr 0
 
 void loop() {
-  Serial.print(wait_for_resume);
-  Serial.print("\t");
    if (IR.decode(&IR_results)) {    // Check for IR data
+    delay(100);
+    Serial.println(IR_results.value);
     if(IR_results.value == IR_RESET) {
       reset();                // Reset system from remote
     }
@@ -112,37 +131,63 @@ void loop() {
       digitalWrite(PAP_RESUME, LOW);
     }
   } else {
-//    pingAll();  // Ping all ultrasonic sensors
+    forward(0);
+    pingAll();  // Ping all ultrasonic sensors
+    Serial.println(front_high_dist);
 
-    Serial.println(i);
-    i++;
-    forward(100);
-    delay(1000);
-    turnLeft(100);
-    delay(1000);
-    turnRight(1000);
-    delay(1000);
+//    switch(IR_results.value){
+//      case IR_DIR_UP:
+//        forward(150);
+//        break;
+//      case IR_DIR_DOWN:
+//        reverse(150);
+//        break;
+//      case IR_DIR_LEFT:
+//        turnLeft(100);
+//        break;
+//      case IR_DIR_RIGHT:
+//        turnRight(100);
+//        break;
+//      default:
+//        break;
+//      }
+
+    
+
+    //Serial.println(i);
+    //i++;
   }
 }
 
 void setmotor(int speed, int direction, int motor) {  // Set a motor's speed and direction
   speed = direction?255-speed:speed;
-  int pwm_pin = motor?PWM_PINA:PWM_PINB;
-  int dir_pin = motor?DIR_A:DIR_B;
-  motor?speedA=speed:speedB=speed; 
-  motor?directionA=direction:directionB=direction; 
+  int pwm_pin, dir_pin;
+
+  if(motor==MOTORA){
+      pwm_pin = PWM_PINA;
+      dir_pin = DIR_A;
+      speedA = speed;
+      directionA=direction;
+  }
+  else{
+    pwm_pin = PWM_PINB;
+      dir_pin = DIR_B;
+      speedB = speed;
+      directionB=direction;
+  }
+   
   analogWrite(pwm_pin, speed);
   digitalWrite(dir_pin, direction);
 }
 
 void turnRight(int speed) {   // Start right turn at given speed
-  setmotor(speed, 1, MOTORB);
-  setmotor(speed, 0, MOTORA);
+  setmotor(speed, 0, MOTORB);
+  setmotor(speed, 1, MOTORA);
 }
 
 void turnLeft(int speed) {  // Start left turn at given speed
-  setmotor(speed, 0, MOTORB);
-  setmotor(speed, 1, MOTORA);
+  setmotor(speed, 1, MOTORB);
+  setmotor(speed, 0, MOTORA);
 }
 
 void forward(int speed) {   // Move forward at given speed
@@ -169,9 +214,28 @@ void reset() {  // Reset entire system
 }
 
 void pingAll() {  // Ping each ultrasonic for distance in cm
-   front_high_dist = front_high_sonar.ping_cm();
-   front_low_dist = front_low_sonar.ping_cm();
-   front_side_dist = front_side_sonar.ping_cm();
-   back_side_dist = back_side_sonar.ping_cm();
+   front_high_avg[qi] = front_high_sonar.ping_cm();
+   front_low_avg[qi] = front_low_sonar.ping_cm();
+   front_side_avg[qi] = front_side_sonar.ping_cm();
+   back_side_avg[qi] = back_side_sonar.ping_cm();
+
+   front_high_dist = 0;
+   front_low_dist = 0;
+   front_side_dist = 0;
+   back_side_dist = 0;
+   for (int i = 0; i < SAMPS; i++){
+    front_high_dist += front_high_avg[i];
+    front_low_dist += front_low_avg[i];
+    front_side_dist += front_side_avg[i];
+    back_side_dist += back_side_avg[i];
+    }
+   front_high_dist = front_high_dist >> LOGSAMPS;
+   front_low_dist = front_low_dist >> LOGSAMPS;
+   front_side_dist = front_side_dist >> LOGSAMPS;
+   back_side_dist = back_side_dist >> LOGSAMPS;
+
+   
+   qi++;
+   if (qi==SAMPS) qi=0;
 }
 

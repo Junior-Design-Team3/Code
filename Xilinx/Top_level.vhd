@@ -133,10 +133,10 @@ begin
 	);
 	
 		Inst_HEXon7segDisp: HEXon7segDisp PORT MAP(
-		hex_data_in0 => enc_distance(3 downto 0),
-		hex_data_in1 => enc_distance(7 downto 4),
-		hex_data_in2 => enc_distance(11 downto 8),
-		hex_data_in3 => enc_distance(15 downto 12),
+		hex_data_in3 => enc_distance(3 downto 0),
+		hex_data_in2 => enc_distance(7 downto 4),
+		hex_data_in1 => enc_distance(11 downto 8),
+		hex_data_in0 => enc_distance(15 downto 12),
 		dp_in => (others => '0'),
 		seg_out => Seg7_SEG,
 		an_out => Seg7_AN,
