@@ -11,10 +11,10 @@
 #define DIR_B 4
 
 //pathing constants
-#define ORTHOG_TIME 1000
+#define ORTHOG_TIME 1000      // SET TO 1000 for full battery
 #define BACK_STEP_TIME 600
-#define OBSTACLE_LENGTH 20
-#define OVERSHOOT_TIME 50
+#define OBSTACLE_LENGTH 15
+#define OVERSHOOT_TIME 100    // CHANGE FOR BATTERY
 #define BRAKE_TIME 50
 #define CLEARANCE_TIME 100
 #define DEBUG 0
@@ -37,7 +37,8 @@
 #define BASE_DIST_FRONT_L 17
 #define BASE_DIST_FRONT_H 18
 #define BASE_DIST_LEFT 15
-#define ALIGN_KP 5
+#define ALIGN_KC 75
+#define ALIGN_KP ((255 - ALIGN_KC) / OBSTACLE_LENGTH)
 
 
 #define MINE_PIN 2  // Papilio control signals
@@ -411,7 +412,7 @@ void handleObstacle() { // get around obstacle
 void alignSensors() {
   if (abs(front_side_dist - back_side_dist) < OBSTACLE_LENGTH && !obstacle) {
     while (abs(front_side_dist - back_side_dist)) {
-      uint16_t speed = 100 + abs(front_side_dist - back_side_dist) * ALIGN_KP;
+      unsigned long speed = ALIGN_KC + abs(front_side_dist - back_side_dist) * ALIGN_KP;
       if (speed > 255) speed=255;
       if (front_side_dist - back_side_dist > 2) turnRight(speed);
       else if (front_side_dist - back_side_dist < -2) turnLeft(speed);
@@ -462,5 +463,10 @@ void pingAll() {  // Ping each ultrasonic for distance in cm
 //  Serial.print(front_low_dist);
 //  Serial.print(", ");
 //  Serial.println(abs(front_high_dist - front_low_dist));
+Serial.print(front_side_dist);
+Serial.print(", ");
+Serial.print(back_side_dist);
+Serial.print(", ");
+Serial.println(abs(front_side_dist - back_side_dist));
 }
 
