@@ -11,10 +11,10 @@
 #define DIR_B 4
 
 //pathing constants
-#define ORTHOG_TIME 1000      // SET TO 1000 for full battery
+#define ORTHOG_TIME 900      // SET TO 1000 for full battery
 #define BACK_STEP_TIME 600
 #define OBSTACLE_LENGTH 15
-#define OVERSHOOT_TIME 100    // CHANGE FOR BATTERY
+#define OVERSHOOT_TIME 70    // CHANGE FOR BATTERY
 #define BRAKE_TIME 50
 #define CLEARANCE_TIME 100
 #define DEBUG 0
@@ -181,11 +181,11 @@ void loop() {
       if (abs(front_side_dist - back_side_dist) > 2) alignSensors();
       forward(200);
       pingAll();  // Ping all ultrasonic sensors
-//      Serial.print(front_left_dist);
-//      Serial.print(" ");
-//      Serial.println(front_low_dist);
+      //      Serial.print(front_left_dist);
+      //      Serial.print(" ");
+      //      Serial.println(front_low_dist);
 
-        //Serial.println(obstacle);
+      //Serial.println(obstacle);
 
       //      if (DEBUG) { // if in debug mode, just do what the remote tells you.
       //        switch (IR_results.value) {
@@ -213,7 +213,7 @@ void loop() {
       pingAll();
       //forward(200);
       //wait_for_resume = 1;
-      
+
       if (obstacle) {
         if (preObstacle) {
           if (back_side_dist < OBSTACLE_LENGTH) preObstacle = false;
@@ -256,8 +256,8 @@ void loop() {
             alignSensors();
             handleObstacle();
           }
-          else{ 
-              if (dir == 3) {
+          else {
+            if (dir == 3) {
               reverse(200);
               delay(BACK_STEP_TIME);
               forward(0);
@@ -280,12 +280,12 @@ void loop() {
         } //else if(front_left_dist < BASE_DIST_LEFT) orthogLeft();
       }
 
-//  reverse(200);
-//  delay(BACK_STEP_TIME);
-//  orthogLeft();
-//  alignSensors();
-//  wait_for_resume = true;
-      
+      //  reverse(200);
+      //  delay(BACK_STEP_TIME);
+      //  orthogLeft();
+      //  alignSensors();
+      //  wait_for_resume = true;
+
       //      if ((front_high_dist <= BASE_DIST_FRONT_H || front_low_dist <= BASE_DIST_FRONT_L)) {
       //
       //        orthogLeft();
@@ -410,17 +410,23 @@ void handleObstacle() { // get around obstacle
 }
 
 void alignSensors() {
-  if (abs(front_side_dist - back_side_dist) < OBSTACLE_LENGTH && !obstacle) {
-    while (abs(front_side_dist - back_side_dist)) {
-      unsigned long speed = ALIGN_KC + abs(front_side_dist - back_side_dist) * ALIGN_KP;
-      if (speed > 255) speed=255;
-      if (front_side_dist - back_side_dist > 2) turnRight(speed);
-      else if (front_side_dist - back_side_dist < -2) turnLeft(speed);
-      pingAll();
+  digitalWrite(13, HIGH);
+//  if (wait_for_resume) {
+//    forward(0);
+//  } else {
+    if (abs(front_side_dist - back_side_dist) < OBSTACLE_LENGTH && !obstacle) {
+      while (abs(front_side_dist - back_side_dist)) {
+        unsigned long speed = ALIGN_KC + abs(front_side_dist - back_side_dist) * ALIGN_KP;
+        if (speed > 255) speed = 255;
+        if (front_side_dist - back_side_dist > 2) turnRight(speed);
+        else if (front_side_dist - back_side_dist < -2) turnLeft(speed);
+        pingAll();
+      }
+      forward(0);
+      delay(BRAKE_TIME);
     }
-    forward(0);
-    delay(BRAKE_TIME);
-  } else return;
+  //k]}
+  digitalWrite(13, LOW);
 }
 
 void pingAll() {  // Ping each ultrasonic for distance in cm
@@ -458,15 +464,15 @@ void pingAll() {  // Ping each ultrasonic for distance in cm
   if (qi == SAMPS) qi = 0;
   delay(15);
 
-//  Serial.print(front_high_dist);
-//  Serial.print(", ");
-//  Serial.print(front_low_dist);
-//  Serial.print(", ");
-//  Serial.println(abs(front_high_dist - front_low_dist));
-Serial.print(front_side_dist);
-Serial.print(", ");
-Serial.print(back_side_dist);
-Serial.print(", ");
-Serial.println(abs(front_side_dist - back_side_dist));
+  //  Serial.print(front_high_dist);
+  //  Serial.print(", ");
+  //  Serial.print(front_low_dist);
+  //  Serial.print(", ");
+  //  Serial.println(abs(front_high_dist - front_low_dist));
+  Serial.print(front_side_dist);
+  Serial.print(", ");
+  Serial.print(back_side_dist);
+  Serial.print(", ");
+  Serial.println(abs(front_side_dist - back_side_dist));
 }
 
